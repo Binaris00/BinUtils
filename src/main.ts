@@ -1,8 +1,10 @@
-import { App, Modal, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, MarkdownView, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
 import { DEFAULT_SETTINGS, MyPluginSettings } from './noused';
+import { BaseModal } from './components/modals';
 
-export default class MyPlugin extends Plugin {
+export default class BinJournaling extends Plugin {
 	settings: MyPluginSettings;
+	callouts: string;
 
 	async onload() {
 		await this.loadSettings();
@@ -11,11 +13,65 @@ export default class MyPlugin extends Plugin {
 			id: 'open-sample-modal-simple',
 			name: 'Open sample modal (simple)',
 			callback: () => {
-				new SampleModal(this.app).open();
+				new BaseModal(this.app, this).open();
 			}
 		});
+
+		this.addCommand({
+			id: 'sample-editor-command',
+			name: 'Sample editor command',
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				console.log(editor.getSelection());
+				editor.replaceSelection(this.callouts);
+			}
+		});
+
 		this.addSettingTab(new SampleSettingTab(this.app, this));
 	}
+
+
+	 async logic(path: string){
+		const noteFile = this.app.metadataCache.getFirstLinkpathDest(path, "/");
+		if(noteFile === null) {
+			new Notice("Failed to find note file by path " + path);
+			return;
+		} 
+
+		let text = await this.app.vault.read(noteFile);
+  		const processedParagraphs = this.processMarkdown(text);
+
+		this.callouts = this.convertToCallouts(processedParagraphs);
+		new Notice("Termino el proceso")
+	}
+
+	convertToCallouts(paragraphsWithTime: { paragraph: string; time: string }[]): string {
+		let result = "";
+		let currentGroup: string[] = [];
+		const groupSize = 3;
+	  
+		paragraphsWithTime.forEach(({ paragraph, time }, index) => {
+		  currentGroup.push(`>> [!journal_daily_2] ${time}\n>> ${paragraph}`);
+		  if (currentGroup.length === groupSize || index === paragraphsWithTime.length - 1) {
+			result += `> [!multi-column]\n${currentGroup.join("\n>\n")}\n\n`;
+			currentGroup = [];
+		  }
+		});
+	  
+		return result.trim();
+	}
+	processMarkdown(content: string): { paragraph: string; time: string }[] {
+		const paragraphs = content.split(/\n\s*\n/);
+		const timeRegex = /-?\s*(\d{1,2}:\d{2}\s*(AM|PM))$/i;
+		
+		return paragraphs.map((paragraph) => {
+		  const trimmedParagraph = paragraph.trim();
+		  const match = trimmedParagraph.match(timeRegex);
+		  const time = match ? match[1] : "0:00 AM-PM";
+		  const cleanParagraph = match ? trimmedParagraph.replace(timeRegex, "").trim() : trimmedParagraph;
+		  return { paragraph: cleanParagraph, time }; 
+		});
+	  }
+	  
 
 	onunload() {
 
@@ -30,26 +86,10 @@ export default class MyPlugin extends Plugin {
 	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
 class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+	plugin: BinJournaling;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: BinJournaling) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
