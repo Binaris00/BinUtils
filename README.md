@@ -31,4 +31,4 @@ ao - 12:00 AM
 
 Now after the process command:
 
-![vault example img](image.png)
+![vault example img](content/image.png)
