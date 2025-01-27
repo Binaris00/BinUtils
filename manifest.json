@@ -1,9 +1,9 @@
 {
-	"id": "bin-journaling",
-	"name": "BinJournaling",
+	"id": "bin-utils",
+	"name": "BinUtils",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Different helps to my Journal part!!",
+	"description": "Personal Utilities for my vault ^^",
 	"author": "Binaris",
 	"isDesktopOnly": false
 }

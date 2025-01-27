@@ -1,47 +1,33 @@
-import { App, Editor, MarkdownView, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
-import { DEFAULT_SETTINGS, MyPluginSettings } from './noused';
-import { BaseModal } from './components/modals';
+import { Editor, MarkdownView, Notice, Plugin } from 'obsidian';
+import { DEFAULT_SETTINGS, IBinSettings as BinUtilsSettings, BinUtilsSettingTab } from './settings';
 
-export default class BinJournaling extends Plugin {
-	settings: MyPluginSettings;
-	callouts: string;
+export default class BinUtils extends Plugin {
+	settings: BinUtilsSettings;
 
 	async onload() {
 		await this.loadSettings();
 
 		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new BaseModal(this.app, this).open();
+			id: 'convert-raw-file-to-callouts',
+			name: 'Convert raw file to callouts',
+			editorCallback: async (editor: Editor, view: MarkdownView) => {
+				const noteFile = this.app.metadataCache.getFirstLinkpathDest(this.settings.rawFile, "/");
+				if(noteFile === null) {
+					new Notice("Failed to find note file by path " + this.settings.rawFile);
+					return;
+				}
+
+				let text = await this.app.vault.cachedRead(noteFile);
+				const processedParagraphs = this.processTime(text);
+
+				let callouts = this.convertToCallouts(processedParagraphs);
+
+				editor.replaceSelection(callouts);
+				new Notice("Callouts generated");
 			}
 		});
 
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection(this.callouts);
-			}
-		});
-
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-	}
-
-
-	 async logic(path: string){
-		const noteFile = this.app.metadataCache.getFirstLinkpathDest(path, "/");
-		if(noteFile === null) {
-			new Notice("Failed to find note file by path " + path);
-			return;
-		} 
-
-		let text = await this.app.vault.read(noteFile);
-  		const processedParagraphs = this.processMarkdown(text);
-
-		this.callouts = this.convertToCallouts(processedParagraphs);
-		new Notice("Termino el proceso")
+		this.addSettingTab(new BinUtilsSettingTab(this.app, this));
 	}
 
 	convertToCallouts(paragraphsWithTime: { paragraph: string; time: string }[]): string {
@@ -59,7 +45,8 @@ export default class BinJournaling extends Plugin {
 	  
 		return result.trim();
 	}
-	processMarkdown(content: string): { paragraph: string; time: string }[] {
+
+	processTime(content: string): { paragraph: string; time: string }[] {
 		const paragraphs = content.split(/\n\s*\n/);
 		const timeRegex = /-?\s*(\d{1,2}:\d{2}\s*(AM|PM))$/i;
 		
@@ -70,9 +57,8 @@ export default class BinJournaling extends Plugin {
 		  const cleanParagraph = match ? trimmedParagraph.replace(timeRegex, "").trim() : trimmedParagraph;
 		  return { paragraph: cleanParagraph, time }; 
 		});
-	  }
+	}
 	  
-
 	onunload() {
 
 	}
@@ -83,31 +69,5 @@ export default class BinJournaling extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: BinJournaling;
-
-	constructor(app: App, plugin: BinJournaling) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const {containerEl} = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
 	}
 }
