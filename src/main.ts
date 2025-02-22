@@ -1,5 +1,6 @@
 import { Editor, MarkdownView, moment, Notice, Plugin, TFile } from 'obsidian';
 import { DEFAULT_SETTINGS, IBinSettings as BinUtilsSettings, BinUtilsSettingTab } from './settings';
+import { convertToCallouts, processTime } from './general_utils';
 
 export default class BinUtils extends Plugin {
 	settings: BinUtilsSettings;
@@ -8,22 +9,30 @@ export default class BinUtils extends Plugin {
 		await this.loadSettings();
 
 		this.addCommand({
-			id: 'convert-raw-file-to-callouts',
-			name: 'Convert raw file to callouts',
+			id: 'convert-raw-file-to-journal',
+			name: 'Convert raw file to journal',
 			editorCallback: async (editor: Editor, view: MarkdownView) => {
 				const noteFile = this.app.metadataCache.getFirstLinkpathDest(this.settings.rawFile, "/");
 				if(noteFile === null) {
-					new Notice("Failed to find note file by path " + this.settings.rawFile);
+					new Notice(`Failed to find raw file by path: "${this.settings.rawFile}"`);
 					return;
 				}
 
 				let text = await this.app.vault.cachedRead(noteFile);
-				const processedParagraphs = this.processTime(text);
+				const sections = text.split("\n***\n");
 
-				let callouts = this.convertToCallouts(processedParagraphs);
+				if (sections.length < 2) {
+				  new Notice("No separator '***' found");
+				  return;
+				}
+
+
+				const processedParagraphs = processTime(sections[1]);
+				let callouts = convertToCallouts(processedParagraphs);
 
 				editor.replaceSelection(callouts);
-				new Notice("Callouts generated");
+				new Notice("Journal content generated!");
+				new Notice(`Content: ${processedParagraphs.length}`)
 			}
 		});
 
@@ -38,7 +47,7 @@ export default class BinUtils extends Plugin {
 				}
 				const links = this.app.metadataCache.getFileCache(noteFile)?.links;
 				let text = await this.app.vault.cachedRead(noteFile);
-				const processedParagraphs = this.processTime(text);
+				const processedParagraphs = processTime(text);
 
 				if(links === undefined){
 					new Notice("The raw note don't have any links")
@@ -56,47 +65,19 @@ export default class BinUtils extends Plugin {
 					for(const paragraph of processedParagraphs){
 						if(paragraph.paragraph.includes(`[[${linkNote.basename}]]`)){
 							this.app.vault.append(linkNote, `
-> [!journal_daily_1] [[${now.format("DcMtYYYY")}]]
 > ${paragraph.paragraph}
 `)
+							new Notice(`${linked.link} with new entry: ${paragraph.paragraph}`)
 						}
 					}
 				}
 
-				new Notice("Finished progress")
+				new Notice("Finished progress to set all entries")
+				new Notice(`All entries added: ${links.length}`)
 			}
 		});
 
 		this.addSettingTab(new BinUtilsSettingTab(this.app, this));
-	}
-
-	convertToCallouts(paragraphsWithTime: { paragraph: string; time: string }[]): string {
-		let result = "";
-		let currentGroup: string[] = [];
-		const groupSize = 3;
-	  
-		paragraphsWithTime.forEach(({ paragraph, time }, index) => {
-		  currentGroup.push(`>> [!journal_daily_2] ${time}\n>> ${paragraph}`);
-		  if (currentGroup.length === groupSize || index === paragraphsWithTime.length - 1) {
-			result += `> [!multi-column]\n${currentGroup.join("\n>\n")}\n\n`;
-			currentGroup = [];
-		  }
-		});
-	  
-		return result.trim();
-	}
-
-	processTime(content: string): { paragraph: string; time: string }[] {
-		const paragraphs = content.split(/\n\s*\n/);
-		const timeRegex = /-?\s*(\d{1,2}:\d{2}\s*(AM|PM))$/i;
-		
-		return paragraphs.map((paragraph) => {
-		  const trimmedParagraph = paragraph.trim();
-		  const match = trimmedParagraph.match(timeRegex);
-		  const time = match ? match[1] : "0:00 AM-PM";
-		  const cleanParagraph = match ? trimmedParagraph.replace(timeRegex, "").trim() : trimmedParagraph;
-		  return { paragraph: cleanParagraph, time }; 
-		});
 	}
 	  
 	onunload() {
